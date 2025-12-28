@@ -2,7 +2,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db, get_pagination, require_roles
+from app.dependencies.database import get_db, get_pagination, require_roles
 from app.schemas.voucher import VoucherCreate, VoucherUpdate, VoucherResponse
 from app.schemas.response.base import BaseResponse
 from app.services.voucher_service import (
