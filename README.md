@@ -18,10 +18,10 @@ python -m pip install -r requirements.txt
 DATABASE_URL=mysql+pymysql://user:password@localhost:3306/webmypham
 ```
 
-3. Run migrations (project stores migrations under `app/db/migrations`):
+3. Run alembic create Database
 
 ```bash
-alembic -c app\db\migrations\alembic.ini upgrade head
+alembic upgrade head
 ```
 
 4. Start the dev server:
@@ -38,4 +38,3 @@ Notes
 
 - Keep `.env` out of version control. Use `.gitignore` provided in the repo.
 - If you need, I can add a `.env.example`, switch pagination to page-based params, or generate initial Alembic migrations.
-
