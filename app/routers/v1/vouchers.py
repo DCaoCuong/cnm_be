@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies import get_db, get_pagination, require_roles
 from app.schemas.voucher import VoucherCreate, VoucherUpdate, VoucherResponse
-from app.schemas.base import BaseResponse
+from app.schemas.response.base import BaseResponse
 from app.services.voucher_service import (
     get_voucher,
     get_voucher_by_code,
@@ -35,7 +35,7 @@ def list_vouchers(
     return BaseResponse(success=True, message="OK", data=items, meta=meta)
 
 @router.get("/{voucher_id}", response_model=BaseResponse[VoucherResponse])
-def read_voucher(voucher_id: int, db: Session = Depends(get_db)):
+def read_voucher(voucher_id: str, db: Session = Depends(get_db)):
     obj = get_voucher(db, voucher_id)
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voucher not found")
@@ -45,19 +45,19 @@ def read_voucher(voucher_id: int, db: Session = Depends(get_db)):
 def create_voucher_endpoint(voucher_in: VoucherCreate, db: Session = Depends(get_db), current_user = Depends(require_roles("ADMIN")),):
     if get_voucher_by_code(db, voucher_in.code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Voucher code already exists")
-    obj = create_voucher(db, voucher_in)
+    obj = create_voucher(db, voucher_in, created_by=str(current_user.id) if current_user else None)
     return BaseResponse(success=True, message="Created", data=obj)
 
 @router.put("/{voucher_id}", response_model=BaseResponse[VoucherResponse])
-def update_voucher_endpoint(voucher_id: int, voucher_in: VoucherUpdate, db: Session = Depends(get_db), current_user = Depends(require_roles("ADMIN")),):
-    obj = update_voucher(db, voucher_id, voucher_in)
+def update_voucher_endpoint(voucher_id: str, voucher_in: VoucherUpdate, db: Session = Depends(get_db), current_user = Depends(require_roles("ADMIN")),):
+    obj = update_voucher(db, voucher_id, voucher_in, updated_by=str(current_user.id) if current_user else None)
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voucher not found")
     return BaseResponse(success=True, message="Updated", data=obj)
 
 @router.delete("/{voucher_id}", response_model=BaseResponse[None])
-def delete_voucher_endpoint(voucher_id: int, db: Session = Depends(get_db), current_user = Depends(require_roles("ADMIN")),):
-    ok = soft_delete_voucher(db, voucher_id)
+def delete_voucher_endpoint(voucher_id: str, db: Session = Depends(get_db), current_user = Depends(require_roles("ADMIN")),):
+    ok = soft_delete_voucher(db, voucher_id, deleted_by=str(current_user.id) if current_user else None)
     if not ok:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voucher not found")
     return BaseResponse(success=True, message="Deleted", data=None)

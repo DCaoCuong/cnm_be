@@ -2,7 +2,8 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.dependencies import get_db, get_current_user
+from app.dependencies.database import get_db
+from app.dependencies.auth import get_current_user
 from app.core.security import create_access_token
 from app.services.auth_service import authenticate_user, create_user, get_user_by_email
 from app.schemas.auth import UserCreate, UserResponse, TokenResponse, LoginRequest
@@ -55,5 +56,3 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 def read_current_user(current_user = Depends(get_current_user)):
     return current_user
 
-
-# Note: `/auth/token` now accepts JSON body {"email":..., "password":...}.

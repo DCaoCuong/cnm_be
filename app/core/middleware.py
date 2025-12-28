@@ -1,17 +1,20 @@
+import uuid
+import time
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.security import decode_access_token
-from app.db.database import SessionLocal
+from app.core.database import SessionLocal
 from app.models.user import User
 from types import SimpleNamespace
+import logging
 
+logger = logging.getLogger("app")                                                                                           
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         auth = request.headers.get("Authorization")
         request.state.user = None
         request.state.token_payload = None
-
         if auth and auth.startswith("Bearer "):
             token = auth.split(" ")[1]
             payload = decode_access_token(token)
@@ -39,3 +42,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         db.close()
 
         return await call_next(request)
+    
+class TraceIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        trace_id = request.headers.get("X-Trace-Id", str(uuid.uuid4()))
+        request.state.trace_id = trace_id
+
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+
+        response.headers["X-Trace-Id"] = trace_id
+        logger.info(
+            f"Trace: {trace_id} - Path: {request.url.path} - Time: {process_time:.4f}s"
+        )
+        return response
