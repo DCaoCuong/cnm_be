@@ -89,5 +89,3 @@ Notes
 - **dependencies** đóng vai trò nhỏ gọn, có thể inject vào route/service để dùng lại các logic chung như xác thực/phân trang/quyền hạn.
 - **middleware** xử lý xuyên suốt mọi request vào app (auth, logging, trace...).
 - Cấu trúc project này phù hợp cho API chuyên nghiệp, dễ mở rộng, bảo trì theo chiều sâu hoặc microservice.
-
-Nếu muốn bổ sung giải thích cho thư mục, file hoặc service nào cụ thể hơn, bạn hãy yêu cầu chi tiết nhé!
