@@ -44,8 +44,6 @@ Notes
 # GIẢI THÍCH CẤU TRÚC THƯ MỤC
 
 ## 1. Cấu trúc thư mục chính
-
-- **app/controller/**: Chứa các controller xử lý luồng nghiệp vụ trực tiếp, gọi tới service hoặc repository, nhận request và trả response.
 - **app/core/**: Các cài đặt lõi (configuration, database, bảo mật, middleware, exception handling, ...). Đây là nơi cấu hình mọi thứ chung cho dự án.
 - **app/db/**: Chứa migrations (tạo, thay đổi cấu trúc database bằng Alembic).
 - **app/dependencies/**: Định nghĩa các dependency sử dụng với FastAPI's Depends như xác thực, phân trang, permission,... (xem phần dưới).
