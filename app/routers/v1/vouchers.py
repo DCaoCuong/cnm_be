@@ -2,8 +2,10 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.dependencies.database import get_db, get_pagination, require_roles
-from app.schemas.voucher import VoucherCreate, VoucherUpdate, VoucherResponse
+from app.dependencies.database import get_db
+from app.dependencies.pagination import get_pagination
+from app.dependencies.permission import require_roles
+from app.schemas.request.voucher import VoucherCreate, VoucherUpdate, VoucherResponse
 from app.schemas.response.base import BaseResponse
 from app.services.voucher_service import (
     get_voucher,
@@ -20,6 +22,7 @@ router = APIRouter(prefix="/vouchers", tags=["vouchers"])
 def list_vouchers(
     params: dict = Depends(get_pagination),
     db: Session = Depends(get_db),
+    current_user = Depends(require_roles("CLIENT", "ADMIN")),
 ):
     items, total = get_vouchers(
         db,
@@ -35,7 +38,7 @@ def list_vouchers(
     return BaseResponse(success=True, message="OK", data=items, meta=meta)
 
 @router.get("/{voucher_id}", response_model=BaseResponse[VoucherResponse])
-def read_voucher(voucher_id: str, db: Session = Depends(get_db)):
+def read_voucher(voucher_id: str, db: Session = Depends(get_db), current_user = Depends(require_roles("CLIENT", "ADMIN"))):
     obj = get_voucher(db, voucher_id)
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voucher not found")

@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.models.voucher import Voucher
 from app.repositories.voucher_repository import VoucherRepository
-from app.schemas.voucher import VoucherCreate, VoucherUpdate
+from app.schemas.request.voucher import VoucherCreate, VoucherUpdate
 
 
 def get_voucher(db: Session, voucher_id: str) -> Optional[Voucher]:
