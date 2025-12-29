@@ -4,7 +4,7 @@ from app.core.config import settings
 
 engine = create_engine(
     settings.DATABASE_URL,
-    # Echo=True giúp bạn xem được các câu lệnh SQL mà Alembic/SQLAlchemy thực thi ở console
+    # Echo=True
     echo=settings.DEBUG,           
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,

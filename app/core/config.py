@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", 
         env_file_encoding="utf-8",
-        extra="ignore"  # Bỏ qua các biến không khai báo trong class này
+        extra="ignore" 
     )
 
     # --- Database Configuration ---
@@ -29,8 +29,6 @@ class Settings(BaseSettings):
     RELOAD: bool = True
 
     # --- CORS Configuration ---
-    # Chuyển đổi chuỗi "url1,url2" từ .env thành List["url1", "url2"]
-   # Thay đổi kiểu dữ liệu ở đây để tránh Pydantic tự parse JSON
     CORS_ORIGINS: Any = [] 
 
     @field_validator("CORS_ORIGINS", mode="before")

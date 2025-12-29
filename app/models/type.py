@@ -6,5 +6,5 @@ from app.models.mixins import AuditMixin
 class Type(AuditMixin, Base):
     __tablename__ = "types"
     name = Column(String(100))
-    values = relationship("TypeValues", back_populates="type")
+    values = relationship("TypeValue", back_populates="type")
 
