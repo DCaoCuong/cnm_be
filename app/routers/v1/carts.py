@@ -22,44 +22,108 @@ from app.services.cart_service import (
     delete_cart_item,
     get_cart_item,
 )
+from app.models.productType import ProductType
+from app.models.cartItem import CartItem
 
 router = APIRouter(prefix="/carts", tags=["carts"])
 
 
 @router.post("/", response_model=BaseResponse[CartResponse], status_code=status.HTTP_201_CREATED)
 def create_cart_endpoint(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    obj = create_cart_for_user(db, str(current_user.id), created_by=str(current_user.id))
-    return BaseResponse(success=True, message="Created", data=obj)
+    try:
+        obj = create_cart_for_user(db, str(current_user.id), created_by=str(current_user.id))
+        return BaseResponse(success=True, message="Giỏ hàng đã được tạo.", data=obj)
+    except Exception:
+        return BaseResponse(success=False, message="Đã xảy ra lỗi.", data=None)
 
 
 @router.get("/me", response_model=BaseResponse[CartResponse])
 def get_my_cart(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     obj = get_cart_by_user(db, str(current_user.id))
     if not obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
-    return BaseResponse(success=True, message="OK", data=obj)
+        return BaseResponse(success=False, message=f"Không tìm thấy giỏ hàng.", data=None)
+    return BaseResponse(success=True, message="Lấy giỏ hàng thành công.", data=obj)
 
 
 @router.post("/{cart_id}/items", response_model=BaseResponse[CartItemResponse], status_code=status.HTTP_201_CREATED)
 def add_item(cart_id: str, item_in: CartItemCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    obj = add_cart_item(db, cart_id, item_in, created_by=str(current_user.id))
-    return BaseResponse(success=True, message="Created", data=obj)
+    try:
+        # ensure cart exists and belongs to current user
+        cart = get_cart(db, cart_id)
+        if not cart:
+            return BaseResponse(success=False, message=f"Không tìm thấy giỏ hàng.", data=None)
+        if str(cart.user_id) != str(current_user.id):
+            return BaseResponse(success=False, message="Bạn không có quyền truy cập vào giỏ hàng này.", data=None)
+        # validate product type and stock with details
+        pt = db.query(ProductType).filter(ProductType.id == item_in.product_type_id, ProductType.deleted_at.is_(None)).first()
+        if not pt:
+            return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm.", data=None)
+        existing = db.query(CartItem).filter(CartItem.cart_id == cart_id, CartItem.product_type_id == item_in.product_type_id, CartItem.deleted_at.is_(None)).first()
+        total_requested = (existing.quantity if existing else 0) + int(item_in.quantity)
+        if pt.stock is not None and total_requested > pt.stock:
+            return BaseResponse(success=False, message=f"Không đủ tồn kho: yêu cầu {total_requested}, còn {pt.stock}.", data=None)
+        obj = add_cart_item(db, cart_id, item_in, created_by=str(current_user.id))
+        return BaseResponse(success=True, message="Sản phẩm đã được thêm vào giỏ hàng.", data=obj)
+    except HTTPException as e:
+        code = getattr(e, "status_code", None)
+        # use exception detail if available, translate common phrases
+        detail = getattr(e, "detail", "lỗi")
+        if code == status.HTTP_404_NOT_FOUND:
+            return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm: {detail}.", data=None)
+        elif code == status.HTTP_400_BAD_REQUEST:
+            return BaseResponse(success=False, message=f"Không đủ tồn kho: {detail}.", data=None)
+        else:
+            return BaseResponse(success=False, message=f"Đã xảy ra lỗi: {detail}.", data=None)
+    except Exception:
+        return BaseResponse(success=False, message="Đã xảy ra lỗi.", data=None)
 
 
 @router.put("/{cart_id}/items/{item_id}", response_model=BaseResponse[CartItemResponse])
 def update_item(cart_id: str, item_id: str, item_in: CartItemUpdate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    obj = update_cart_item(db, item_id, item_in, updated_by=str(current_user.id))
-    if not obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
-    return BaseResponse(success=True, message="Updated", data=obj)
+    try:
+        # ensure item exists and belongs to the cart
+        existing = get_cart_item(db, item_id)
+        if not existing:
+            return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm trong giỏ hàng.", data=None)
+        if existing.cart_id != cart_id:
+            return BaseResponse(success=False, message="Sản phẩm không thuộc giỏ hàng này.", data=None)
+
+        # if updating quantity, check stock and return detailed message
+        if item_in.quantity is not None:
+            pt = db.query(ProductType).filter(ProductType.id == existing.product_type_id, ProductType.deleted_at.is_(None)).first()
+            if not pt:
+                return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm.", data=None)
+            new_qty = int(item_in.quantity)
+            if pt.stock is not None and new_qty > pt.stock:
+                return BaseResponse(success=False, message=f"Không đủ tồn kho: yêu cầu {new_qty}, còn {pt.stock}.", data=None)
+
+        obj = update_cart_item(db, item_id, item_in, updated_by=str(current_user.id))
+        if not obj:
+            return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm trong giỏ hàng.", data=None)
+        return BaseResponse(success=True, message="Sản phẩm trong giỏ hàng đã được cập nhật.", data=obj)
+    except HTTPException as e:
+        code = getattr(e, "status_code", None)
+        if code == status.HTTP_404_NOT_FOUND:
+            detail = getattr(e, "detail", "")
+            return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm: {detail}.", data=None)
+        elif code == status.HTTP_400_BAD_REQUEST:
+            detail = getattr(e, "detail", "")
+            return BaseResponse(success=False, message=f"Không đủ tồn kho: {detail}.", data=None)
+        else:
+            detail = getattr(e, "detail", "")
+            return BaseResponse(success=False, message=f"Đã xảy ra lỗi: {detail}.", data=None)
+    except Exception:
+        return BaseResponse(success=False, message="Đã xảy ra lỗi.", data=None)
 
 
 @router.delete("/{cart_id}/items/{item_id}", response_model=BaseResponse[None])
 def delete_item(cart_id: str, item_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     obj = get_cart_item(db, item_id)
     if not obj:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
+        return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm trong giỏ hàng.", data=None)
+    if obj.cart_id != cart_id:
+        return BaseResponse(success=False, message="Sản phẩm không thuộc giỏ hàng này.", data=None)
     ok = delete_cart_item(db, item_id, deleted_by=str(current_user.id))
     if not ok:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")
-    return BaseResponse(success=True, message="Deleted", data=None)
+        return BaseResponse(success=False, message=f"Không tìm thấy sản phẩm trong giỏ hàng.", data=None)
+    return BaseResponse(success=True, message="Sản phẩm trong giỏ hàng đã được xóa.", data=None)
