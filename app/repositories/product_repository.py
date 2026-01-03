@@ -1,54 +1,61 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func, desc
+from app.models.product import Product
+from app.models.productType import ProductType  
+from app.models.review import Review
+from app.models.wishlist import Wishlist
+from app.repositories.base import BaseRepository
 
-from app.dependencies.database import get_db
-from app.schemas.response.base import BaseResponse
-from app.schemas.response.product import ProductDetailResponse, ProductTypeResponse
-from app.services.product_service import ProductService
 
-router = APIRouter()
+class ProductRepository(BaseRepository[Product]):
+    """Repository cho Product với các method truy vấn sản phẩm"""
 
-@router.get("/{product_id}", response_model=BaseResponse[ProductDetailResponse])
-def get_product_detail(product_id: str, db: Session = Depends(get_db)):
-    service = ProductService(db)
-    product = service.get_detail(product_id)
-    if not product:
-        return BaseResponse(success=False, message="Không tìm thấy sản phẩm.", data=None)
-    return BaseResponse(success=True, data=product)
+    def __init__(self, db: Session):
+        super().__init__(Product, db)
 
-@router.get("/brand/{brand_id}", response_model=BaseResponse[List[ProductDetailResponse]])
-def get_products_by_brand(
-    brand_id: str,
-    limit: int = Query(20, ge=1, le=100),
-    skip: int = 0,
-    db: Session = Depends(get_db)
-):
-    service = ProductService(db)
-    products = service.get_by_brand(brand_id, limit=limit, skip=skip)
-    return BaseResponse(success=True, data=products)
+    def get_detail(self, product_id: str) -> Optional[Product]:
+        """Lấy chi tiết sản phẩm theo ID"""
+        return self.db.query(Product).filter(
+            Product.id == product_id,
+            Product.deleted_at.is_(None),
+            Product.is_active == True
+        ).first()
 
-@router.get("/category/{category_id}", response_model=BaseResponse[List[ProductDetailResponse]])
-def get_products_by_category(
-    category_id: str,
-    limit: int = Query(20, ge=1, le=100),
-    skip: int = 0,
-    db: Session = Depends(get_db)
-):
-    service = ProductService(db)
-    products = service.get_by_category(category_id, limit=limit, skip=skip)
-    return BaseResponse(success=True, data=products)
+    def get_by_brand(self, brand_id: str, limit: int = 20, skip: int = 0) -> List[Product]:
+        """Lấy danh sách sản phẩm theo brand"""
+        return self.db.query(Product).filter(
+            Product.brand_id == brand_id,
+            Product.deleted_at.is_(None),
+            Product.is_active == True
+        ).offset(skip).limit(limit).all()
 
-@router.get("/best-selling", response_model=BaseResponse[List[ProductDetailResponse]])
-def get_best_selling_products(limit: int = 10, db: Session = Depends(get_db)):
-    service = ProductService(db)
-    result = service.get_best_selling(limit)
-    products = [prod for prod, _ in result]
-    return BaseResponse(success=True, data=products)
+    def get_by_category(self, category_id: str, limit: int = 20, skip: int = 0) -> List[Product]:
+        """Lấy danh sách sản phẩm theo category"""
+        return self.db.query(Product).filter(
+            Product.category_id == category_id,
+            Product.deleted_at.is_(None),
+            Product.is_active == True
+        ).offset(skip).limit(limit).all()
 
-@router.get("/most-favorite", response_model=BaseResponse[List[ProductDetailResponse]])
-def get_most_favorite_products(limit: int = 10, db: Session = Depends(get_db)):
-    service = ProductService(db)
-    result = service.get_most_favorite(limit)
-    products = [prod for prod, _ in result]
-    return BaseResponse(success=True, data=products)
+    def get_best_selling(self, limit: int = 10) -> List[Tuple[Product, int]]:
+        """Lấy top sản phẩm bán chạy nhất (dựa vào số lượng đã bán của product_types)"""
+        return self.db.query(Product, func.sum(ProductType.sold).label('total_sold')).join(
+            ProductType, Product.id == ProductType.product_id
+        ).filter(
+            Product.deleted_at.is_(None),
+            Product.is_active == True
+        ).group_by(Product.id).order_by(
+            desc('total_sold')
+        ).limit(limit).all()
+
+    def get_most_favorite(self, limit: int = 10) -> List[Tuple[Product, int]]:
+        """Lấy top sản phẩm được yêu thích nhất (dựa vào số lượng trong wishlist)"""
+        return self.db.query(Product, func.count(Wishlist.id).label('favorite_count')).join(
+            Wishlist, Product.id == Wishlist.product_id
+        ).filter(
+            Product.deleted_at.is_(None),
+            Product.is_active == True
+        ).group_by(Product.id).order_by(
+            desc('favorite_count')
+        ).limit(limit).all()
