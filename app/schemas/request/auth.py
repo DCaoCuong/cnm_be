@@ -52,3 +52,5 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
     name: Optional[str] = None
+    dob: Optional[datetime] = None
+    gender: Optional[int] = None
