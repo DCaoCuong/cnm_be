@@ -1,16 +1,14 @@
 from typing import Optional, List, Tuple, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc, or_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, desc
 from app.models.product import Product
-from app.models.productType import ProductType  
+from app.models.orderDetail import OrderDetail
 from app.models.review import Review
-from app.models.wishlist import Wishlist
 from app.repositories.base import BaseRepository
 
-
 class ProductRepository(BaseRepository[Product]):
-    """Repository cho Product với các method truy vấn sản phẩm"""
-
     def __init__(self, db: Session):
         super().__init__(Product, db)
 
@@ -90,38 +88,50 @@ class ProductRepository(BaseRepository[Product]):
 
     def get_by_brand(self, brand_id: str, limit: int = 20, skip: int = 0) -> List[Product]:
         """Lấy danh sách sản phẩm theo brand"""
+    def get_detail(self, id: str):
+        return self.db.query(Product)\
+            .options(
+                joinedload(Product.brand),
+                joinedload(Product.category),
+                joinedload(Product.product_types)
+            )\
+            .filter(Product.id == id, Product.deleted_at.is_(None))\
+            .first()
+
+    def get_by_brand(self, brand_id: str, limit: int = 20, skip: int = 0):
         return self.db.query(Product).filter(
             Product.brand_id == brand_id,
             Product.deleted_at.is_(None),
-            Product.is_active == True
-        ).offset(skip).limit(limit).all()
+            Product.is_active == True,
+        ).options(joinedload(Product.product_types)).offset(skip).limit(limit).all()
 
-    def get_by_category(self, category_id: str, limit: int = 20, skip: int = 0) -> List[Product]:
-        """Lấy danh sách sản phẩm theo category"""
+    def get_by_category(self, category_id: str, limit: int = 20, skip: int = 0):
         return self.db.query(Product).filter(
             Product.category_id == category_id,
             Product.deleted_at.is_(None),
-            Product.is_active == True
-        ).offset(skip).limit(limit).all()
+            Product.is_active == True,
+        ).options(joinedload(Product.product_types)).offset(skip).limit(limit).all()
 
-    def get_best_selling(self, limit: int = 10) -> List[Tuple[Product, int]]:
-        """Lấy top sản phẩm bán chạy nhất (dựa vào số lượng đã bán của product_types)"""
-        return self.db.query(Product, func.sum(ProductType.sold).label('total_sold')).join(
-            ProductType, Product.id == ProductType.product_id
-        ).filter(
-            Product.deleted_at.is_(None),
-            Product.is_active == True
-        ).group_by(Product.id).order_by(
-            desc('total_sold')
-        ).limit(limit).all()
+    def get_best_selling(self, limit: int = 10):
+        return self.db.query(
+                Product,
+                func.sum(OrderDetail.quantity).label("total_sold")
+            )\
+            .join(OrderDetail, OrderDetail.product_id == Product.id)\
+            .filter(Product.deleted_at.is_(None), Product.is_active == True)\
+            .group_by(Product.id)\
+            .order_by(desc("total_sold"))\
+            .limit(limit)\
+            .all()
 
-    def get_most_favorite(self, limit: int = 10) -> List[Tuple[Product, int]]:
-        """Lấy top sản phẩm được yêu thích nhất (dựa vào số lượng trong wishlist)"""
-        return self.db.query(Product, func.count(Wishlist.id).label('favorite_count')).join(
-            Wishlist, Product.id == Wishlist.product_id
-        ).filter(
-            Product.deleted_at.is_(None),
-            Product.is_active == True
-        ).group_by(Product.id).order_by(
-            desc('favorite_count')
-        ).limit(limit).all()
+    def get_most_favorite(self, limit: int = 10):
+        return self.db.query(
+                Product,
+                func.avg(Review.rating).label("avg_rating")
+            )\
+            .join(Review, Review.product_id == Product.id)\
+            .filter(Product.deleted_at.is_(None), Product.is_active == True)\
+            .group_by(Product.id)\
+            .order_by(desc("avg_rating"))\
+            .limit(limit)\
+            .all()
