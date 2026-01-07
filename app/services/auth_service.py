@@ -94,6 +94,7 @@ def create_user(
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     user = get_user_by_email(db, email)
     if not user:
+        print(f"DEBUG: Không tìm thấy email {email}")
         return None
     is_valid = verify_password(password, getattr(user, "password_hash", ""))
     if not is_valid:

@@ -18,6 +18,7 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
 def authentication(form_data: LoginRequest, db: Session = Depends(get_db)):
     # 1. Xác thực user/pass
     print(form_data.password)
+
     user = authenticate_user(db, form_data.email, form_data.password)
 
     if not user:
