@@ -21,7 +21,7 @@ def authentication(form_data: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.email, form_data.password)
 
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tài khoản hoặc mật khẩu không đúng!")
     
     # 2. Tạo token và trả về response kèm thông tin user
     # Logic tạo token + lưu refresh token vào DB đã chuyển vào service
