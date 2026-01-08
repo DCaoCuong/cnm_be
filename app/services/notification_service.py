@@ -41,6 +41,46 @@ class NotificationService:
         
         return notification
     
+    def create_order_status_notification(
+        self,
+        order_id: str,
+        user_id: str,
+        new_status: str,
+        updated_by: Optional[str] = None
+    ) -> Notification:
+        """
+        Tạo thông báo khi admin cập nhật trạng thái đơn hàng và gửi đến khách hàng
+        """
+        status_messages = {
+            "confirmed": "✅ Đơn hàng đã được xác nhận",
+            "processing": "📦 Đơn hàng đang được chuẩn bị",
+            "shipping": "🚚 Đơn hàng đang được giao",
+            "delivered": "📬 Đơn hàng đã được giao",
+            "completed": "✨ Đơn hàng hoàn thành",
+            "cancelled": "❌ Đơn hàng đã bị hủy"
+        }
+        
+        title = status_messages.get(new_status, "📋 Cập nhật đơn hàng")
+        content = f"Đơn hàng #{order_id[:8]} của bạn đã được cập nhật trạng thái: {new_status}"
+        
+        notification = self.repo.create_notification(
+            title=title,
+            content=content,
+            type="order_status",
+            order_id=order_id,
+            sender_id=updated_by,
+            is_global=False,
+            created_by=updated_by
+        )
+        
+        # Gửi notification đến khách hàng
+        self.repo.create_user_notification(
+            user_id=user_id,
+            notification_id=notification.id
+        )
+        
+        return notification
+    
     def _notify_admins(self, notification_id: str) -> int:
         """Gửi notification đến tất cả users có role ADMIN"""
         # Lấy tất cả admin users
@@ -119,4 +159,21 @@ def notify_admins_new_order(
         customer_name=customer_name,
         total_amount=total_amount,
         created_by=created_by
+    )
+
+
+def notify_user_order_status_change(
+    db: Session,
+    order_id: str,
+    user_id: str,
+    new_status: str,
+    updated_by: Optional[str] = None
+) -> Notification:
+    """Helper function để thông báo cho user khi đơn hàng thay đổi trạng thái"""
+    service = NotificationService(db)
+    return service.create_order_status_notification(
+        order_id=order_id,
+        user_id=user_id,
+        new_status=new_status,
+        updated_by=updated_by
     )

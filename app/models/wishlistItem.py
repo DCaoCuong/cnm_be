@@ -8,3 +8,4 @@ class WishlistItem(AuditMixin, Base):
     wishlist_id = Column(String(36), ForeignKey("wishlists.id"))
     product_type_id = Column(String(36), ForeignKey("product_types.id"))
     wishlist = relationship("Wishlist", back_populates="items")
+    product_type = relationship("ProductType", foreign_keys=[product_type_id])

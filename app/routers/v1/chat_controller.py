@@ -50,25 +50,30 @@ def get_user_messages(
 )
 def get_admin_conversations(
     db: Session = Depends(get_db),
-    admin_id: str = Depends(get_current_user),
     current_user=Depends(require_roles("ADMIN")),
 ):
     """
     ADMIN:
     - Danh sách conversations (đã claim + chưa claim)
     """
+    admin_id = str(current_user.id)
     repo = ChatRepository(db)
     conversations = repo.get_admin_chats(admin_id)
 
     result: List[AdminConversationResponse] = []
     for conv in conversations:
+        # Get customer name from first_name and last_name
+        customer_name = None
+        if conv.customer:
+            first_name = conv.customer.first_name or ""
+            last_name = conv.customer.last_name or ""
+            customer_name = f"{first_name} {last_name}".strip() or conv.customer.email
+        
         result.append(
             AdminConversationResponse(
                 conversationId=str(conv.id),
                 customerId=str(conv.customer_id),
-                customerName=getattr(conv.customer, "name", None)
-                if getattr(conv, "customer", None)
-                else None,
+                customerName=customer_name,
                 lastMessage=conv.last_message,
                 updatedAt=conv.updated_at,
                 isWaiting=conv.admin_id is None,
@@ -93,13 +98,13 @@ def get_admin_messages(
     conversation_id: str,
     limit: int = Query(100, le=200),
     db: Session = Depends(get_db),
-    admin_id: str = Depends(get_current_user),
     current_user=Depends(require_roles("ADMIN")),
 ):
     """
     ADMIN:
     - Lấy tin nhắn của 1 conversation
     """
+    admin_id = str(current_user.id)
     repo = ChatRepository(db)
     messages = repo.get_messages_by_conversation(
         conversation_id=conversation_id,
@@ -137,13 +142,13 @@ def get_admin_messages(
 def claim_conversation(
     conversation_id: str,
     db: Session = Depends(get_db),
-    admin_id: str = Depends(get_current_user),
     current_user=Depends(require_roles("ADMIN")),
 ):
     """
     ADMIN:
     - Nhận xử lý conversation đang chờ
     """
+    admin_id = str(current_user.id)
     repo = ChatRepository(db)
     conv = repo.get_conversation_by_id(conversation_id)
 

@@ -13,11 +13,16 @@ def get_user(db: Session, user_id: str) -> Optional[User]:
 
 
 def list_users(db: Session, skip: int = 0, limit: int = 100, q: Optional[str] = None) -> Tuple[List[User], int]:
-    # simple search by name or email
-    query = db.query(User).filter(User.deleted_at.is_(None))
+    # simple search by first_name, last_name or email
+    from sqlalchemy.orm import joinedload
+    query = db.query(User).options(joinedload(User.roles)).filter(User.deleted_at.is_(None))
     if q:
         like = f"%{q}%"
-        query = query.filter((User.name.ilike(like)) | (User.email.ilike(like)))
+        query = query.filter(
+            (User.first_name.ilike(like)) | 
+            (User.last_name.ilike(like)) | 
+            (User.email.ilike(like))
+        )
     total = query.count()
     items = query.offset(skip).limit(limit).all()
     return items, total

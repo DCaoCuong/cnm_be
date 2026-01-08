@@ -55,6 +55,7 @@ class OrderResponse(BaseModel):
     """Response cho một đơn hàng (list view)"""
     id: str
     user_id: str
+    user_name: Optional[str] = None
     status: str
     payment_method: Optional[str] = None
     total_amount: float
