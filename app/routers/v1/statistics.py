@@ -7,7 +7,7 @@ from sqlalchemy import func, desc
 from typing import List, Optional
 from enum import Enum
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.dependencies.database import get_db
 from app.dependencies.permission import require_roles
@@ -192,5 +192,118 @@ def get_product_statistics_summary(
             total_sold_items=int(total_sold),
             total_revenue=float(total_revenue),
             best_selling=best_selling
+        )
+    )
+
+
+
+class DailyRevenueResponse(BaseModel):
+    """Response cho doanh thu theo ngày"""
+    date: str
+    revenue: float
+    orders_count: int
+
+
+class DashboardStatsResponse(BaseModel):
+    """Response cho dashboard statistics"""
+    total_revenue: float
+    total_orders: int
+    total_customers: int
+    total_products: int
+    daily_revenue: List[DailyRevenueResponse]
+
+
+@router.get("/dashboard", response_model=BaseResponse[DashboardStatsResponse])
+def get_dashboard_statistics(
+    days: int = Query(7, ge=1, le=30, description="Số ngày thống kê doanh thu"),
+    db: Session = Depends(get_db),
+    current_user = Depends(require_roles("admin"))
+):
+    """
+    Thống kê tổng quan cho Dashboard (Admin only)
+    
+    Returns:
+    - total_revenue: Tổng doanh thu từ đơn hàng completed
+    - total_orders: Tổng số đơn hàng
+    - total_customers: Tổng số khách hàng
+    - total_products: Tổng số sản phẩm
+    - daily_revenue: Doanh thu theo ngày (7 ngày gần nhất)
+    """
+    from app.models.user import User
+    
+    # Tổng doanh thu từ đơn hàng completed
+    total_revenue = db.query(
+        func.coalesce(func.sum(Order.total_amount), 0)
+    ).filter(
+        Order.status == 'completed',
+        Order.deleted_at.is_(None)
+    ).scalar() or 0
+    
+    # Tổng số đơn hàng
+    total_orders = db.query(func.count(Order.id)).filter(
+        Order.deleted_at.is_(None)
+    ).scalar() or 0
+    
+    # Tổng số khách hàng (users không phải admin)
+    total_customers = db.query(func.count(User.id)).filter(
+        User.deleted_at.is_(None)
+    ).scalar() or 0
+    
+    # Tổng số sản phẩm
+    total_products = db.query(func.count(Product.id)).filter(
+        Product.deleted_at.is_(None)
+    ).scalar() or 0
+    
+    # Doanh thu theo ngày (X ngày gần nhất)
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    daily_stats = db.query(
+        func.date(Order.created_at).label('date'),
+        func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
+        func.count(Order.id).label('orders_count')
+    ).filter(
+        Order.status == 'completed',
+        Order.deleted_at.is_(None),
+        func.date(Order.created_at) >= start_date,
+        func.date(Order.created_at) <= end_date
+    ).group_by(
+        func.date(Order.created_at)
+    ).order_by(
+        func.date(Order.created_at)
+    ).all()
+    
+    # Tạo dict để fill missing dates
+    daily_dict = {str(stat.date): stat for stat in daily_stats}
+    
+    # Fill missing dates with 0
+    daily_revenue = []
+    current_date = start_date
+    while current_date <= end_date:
+        date_str = str(current_date)
+        if date_str in daily_dict:
+            stat = daily_dict[date_str]
+            daily_revenue.append(DailyRevenueResponse(
+                date=date_str,
+                revenue=float(stat.revenue or 0),
+                orders_count=int(stat.orders_count or 0)
+            ))
+        else:
+            daily_revenue.append(DailyRevenueResponse(
+                date=date_str,
+                revenue=0.0,
+                orders_count=0
+            ))
+        current_date += timedelta(days=1)
+    
+    return BaseResponse(
+        success=True,
+        message="Lấy thống kê dashboard thành công.",
+        data=DashboardStatsResponse(
+            total_revenue=float(total_revenue),
+            total_orders=total_orders,
+            total_customers=total_customers,
+            total_products=total_products,
+            daily_revenue=daily_revenue
         )
     )

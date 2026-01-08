@@ -64,7 +64,11 @@ class NotificationRepository(BaseRepository[Notification]):
         unread_only: bool = False
     ) -> Tuple[List[UserNotification], int]:
         """Lấy danh sách notifications của user với phân trang"""
-        query = self.db.query(UserNotification).filter(
+        from sqlalchemy.orm import joinedload
+        
+        query = self.db.query(UserNotification).options(
+            joinedload(UserNotification.notification)
+        ).filter(
             UserNotification.user_id == user_id,
             UserNotification.deleted_at.is_(None)
         )

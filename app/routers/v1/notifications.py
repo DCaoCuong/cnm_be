@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.dependencies.database import get_db
+from app.dependencies.auth import get_current_user
 from app.dependencies.permission import require_roles
 from app.schemas.response.base import BaseResponse
 from app.schemas.request.notification import (
@@ -24,10 +25,10 @@ def get_notifications(
     limit: int = Query(20, ge=1, le=100, description="Số lượng lấy"),
     unread_only: bool = Query(False, description="Chỉ lấy thông báo chưa đọc"),
     db: Session = Depends(get_db),
-    current_user = Depends(require_roles("admin"))
+    current_user = Depends(get_current_user)
 ):
     """
-    Lấy danh sách thông báo của Admin
+    Lấy danh sách thông báo của user hiện tại
     
     - **skip**: Số lượng bỏ qua (phân trang)
     - **limit**: Số lượng lấy tối đa
@@ -60,10 +61,10 @@ def get_notifications(
 @router.get("/unread-count", response_model=BaseResponse[UnreadCountResponse])
 def get_unread_count(
     db: Session = Depends(get_db),
-    current_user = Depends(require_roles("admin"))
+    current_user = Depends(get_current_user)
 ):
     """
-    Đếm số thông báo chưa đọc của Admin
+    Đếm số thông báo chưa đọc
     """
     service = NotificationService(db)
     count = service.get_unread_count(current_user.id)
@@ -79,7 +80,7 @@ def get_unread_count(
 def mark_notification_as_read(
     notification_id: str,
     db: Session = Depends(get_db),
-    current_user = Depends(require_roles("admin"))
+    current_user = Depends(get_current_user)
 ):
     """
     Đánh dấu thông báo đã đọc
@@ -106,7 +107,7 @@ def mark_notification_as_read(
 @router.put("/read-all", response_model=BaseResponse)
 def mark_all_notifications_as_read(
     db: Session = Depends(get_db),
-    current_user = Depends(require_roles("admin"))
+    current_user = Depends(get_current_user)
 ):
     """
     Đánh dấu tất cả thông báo đã đọc
@@ -125,7 +126,7 @@ def mark_all_notifications_as_read(
 def get_notification_detail(
     notification_id: str,
     db: Session = Depends(get_db),
-    current_user = Depends(require_roles("admin"))
+    current_user = Depends(get_current_user)
 ):
     """
     Lấy chi tiết thông báo

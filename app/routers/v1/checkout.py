@@ -115,7 +115,24 @@ def create_order(
             note=request.note
         )
         
-        # Nếu thanh toán SePay, tạo QR URL
+        # Tạo thông báo cho admin về đơn hàng mới
+        try:
+            from app.services.notification_service import notify_admins_new_order
+            customer_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+            notify_admins_new_order(
+                db=db,
+                order_id=str(order.id),
+                customer_name=customer_name,
+                total_amount=order.final_amount,
+                created_by=str(current_user.id)
+            )
+            print(f"✅ Notification created for order {order.id}")
+        except Exception as notif_error:
+            # Log lỗi nhưng không fail order creation
+            print(f"❌ Error creating notification: {notif_error}")
+            import traceback
+            traceback.print_exc()
+        
         # Nếu thanh toán SePay, tạo QR URL
         payment_url = None
         payment_content = None

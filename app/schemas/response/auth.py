@@ -1,15 +1,24 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union, List
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
+class RoleResponse(BaseModel):
+    id: Union[UUID, str]
+    name: str
+    
+    class Config:
+        orm_mode = True
+
 class UserResponse(BaseModel):
-    id: UUID
+    id: Union[UUID, str]  # Chấp nhận cả UUID và string
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
+    is_active: bool = True
+    roles: List[RoleResponse] = []
     created_at: Optional[datetime] = None
 
     class Config:

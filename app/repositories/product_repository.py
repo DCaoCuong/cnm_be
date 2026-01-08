@@ -29,8 +29,12 @@ class ProductRepository(BaseRepository[Product]):
         Tìm kiếm và lọc sản phẩm với nhiều điều kiện
         Returns: (list of products, total count)
         """
-        # Base query
-        query = self.db.query(Product).filter(Product.deleted_at.is_(None))
+        # Base query with relationships
+        query = self.db.query(Product).filter(Product.deleted_at.is_(None)).options(
+            joinedload(Product.brand),
+            joinedload(Product.category),
+            joinedload(Product.product_types)
+        )
         
         # Filter by is_active
         if is_active is not None:
@@ -56,6 +60,7 @@ class ProductRepository(BaseRepository[Product]):
         
         # Filter by price range (using ProductType's price)
         if min_price is not None or max_price is not None:
+            from app.models.productType import ProductType
             query = query.join(ProductType, Product.id == ProductType.product_id)
             if min_price is not None:
                 query = query.filter(ProductType.price >= min_price)

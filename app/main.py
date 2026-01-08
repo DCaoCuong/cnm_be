@@ -34,17 +34,6 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -65,12 +54,14 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-# Static files for uploads
-UPLOAD_DIR = Path(__file__).parent / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+# Middleware - IMPORTANT: Add in reverse order (last added = first executed)
+# 1. AuthMiddleware (executes third)
+app.add_middleware(AuthMiddleware)
 
-# CORS middleware - cho phép Frontend gọi API
+# 2. TraceIdMiddleware (executes second)
+app.add_middleware(TraceIdMiddleware) 
+
+# 3. CORS middleware (executes first - MUST BE LAST ADDED)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -78,16 +69,16 @@ app.add_middleware(
         "http://localhost:3000",      # Alternative dev server
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-        # "https://your-frontend-domain.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# middleware
-app.add_middleware(TraceIdMiddleware) 
-app.add_middleware(AuthMiddleware)
+# Static files for uploads
+UPLOAD_DIR = Path(__file__).parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # routers
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
