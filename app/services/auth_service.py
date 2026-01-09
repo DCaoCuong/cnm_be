@@ -1,10 +1,13 @@
 from datetime import timedelta, datetime
 from typing import Optional, Tuple
+import secrets
 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
@@ -12,6 +15,7 @@ from app.repositories.role_repository import RoleRepository
 from app.schemas.request.auth import UserCreate
 from app.core.security import create_access_token
 from app.core.config import settings
+from app.services.email_verification_service import EmailVerificationService
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
@@ -85,10 +89,20 @@ def create_user(
         "first_name": user_in.first_name,
         "last_name": user_in.last_name,
         "phone_number": user_in.phone_number,
+        "email_confirmed": False,  # Mặc định chưa xác thực email
     }
     user = user_repo.create(user_data, created_by=created_by)
     role = role_repo.get_or_create(role_name, created_by=created_by)
     user = user_repo.assign_role(user, role.name)
+    
+    # Gửi mã xác thực email
+    try:
+        verification_service = EmailVerificationService(db)
+        verification_service.send_verification_code(user.id, is_resend=False)
+    except Exception as e:
+        # Log error nhưng không fail registration
+        print(f"Warning: Failed to send verification email: {str(e)}")
+    
     return user
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
@@ -98,6 +112,14 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     is_valid = verify_password(password, getattr(user, "password_hash", ""))
     if not is_valid:
         return None
+    
+    # Strict Mode: Block unverified users from logging in
+    if not user.email_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email chưa được xác thực. Vui lòng kiểm tra email và nhập mã xác thực."
+        )
+    
     return user
 
 
@@ -191,3 +213,74 @@ def renew_tokens(refresh_token: str, db: Session) -> dict:
 
     # 4. Tạo cặp token mới (Rotate)
     return create_tokens_for_user(user, db)
+
+
+def authenticate_google_user(google_id_token: str, db: Session) -> User:
+    """
+    Xác thực Google ID Token và tạo hoặc lấy user từ DB.
+    
+    Args:
+        google_id_token: ID token từ Google OAuth
+        db: Database session
+        
+    Returns:
+        User object
+        
+    Raises:
+        HTTPException: Nếu token không hợp lệ
+    """
+    try:
+        # Verify token với Google
+        idinfo = id_token.verify_oauth2_token(
+            google_id_token, 
+            requests.Request(), 
+            settings.GOOGLE_CLIENT_ID
+        )
+        
+        # Kiểm tra issuer
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer.')
+        
+        # Lấy thông tin user từ token
+        email = idinfo.get('email')
+        given_name = idinfo.get('given_name', '')
+        family_name = idinfo.get('family_name', '')
+        
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email not found in Google token"
+            )
+        
+    except ValueError as e:
+        # Token không hợp lệ
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid Google token: {str(e)}"
+        )
+    
+    # Tìm hoặc tạo user trong DB
+    user_repo = UserRepository(db)
+    user = user_repo.get_by_email(email)
+    
+    if not user:
+        # Tạo user mới nếu chưa tồn tại
+        # Google OAuth không có password nên set password_hash là hash của random string
+        # để đảm bảo không ai có thể login bằng password với tài khoản Google
+        role_repo = RoleRepository(db)
+        random_password = secrets.token_urlsafe(32)  # Random 32-byte string
+        user_data = {
+            "email": email,
+            "password_hash": pwd_context.hash(random_password),  # Hash của random string
+            "first_name": given_name,
+            "last_name": family_name,
+            "phone_number": None,
+            "email_confirmed": True,  # Google OAuth users auto-verified
+        }
+        user = user_repo.create(user_data, created_by="google_oauth")
+        
+        # Gán role CLIENT
+        role = role_repo.get_or_create("CLIENT", created_by="google_oauth")
+        user = user_repo.assign_role(user, role.name)
+    
+    return user
