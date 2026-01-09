@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
@@ -17,16 +18,13 @@ from app.routers.v1.review import router as reviews_router
 from app.routers.v1.addresses import router as addresses_router
 from app.routers.v1.administrative import router as administrative_router
 from app.routers.v1.product import router as product_router
+from app.routers.v1.chat import router as chat_router
+from app.routers.v1.chat_controller import router as chat_router_controller
 from app.routers.v1.order import router as orders_router
 from app.routers.v1.upload import router as upload_router
 from app.routers.v1.checkout import router as checkout_router
 from app.routers.v1.statistics import router as statistics_router
-
-from app.routers.v1.order import router as orders_router
-from app.routers.v1.upload import router as upload_router
-from app.routers.v1.checkout import router as checkout_router
-from app.routers.v1.statistics import router as statistics_router
-
+from app.routers.v1.notifications import router as notifications_router
 
 app = FastAPI(
     title="WebMyPham API",
@@ -34,17 +32,6 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 def custom_openapi():
@@ -67,11 +54,14 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
-# Static files for uploads
-UPLOAD_DIR = Path(__file__).parent / "uploads"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
-# CORS middleware - cho phép Frontend gọi API
+# Middleware - IMPORTANT: Add in reverse order (last added = first executed)
+# 1. AuthMiddleware (executes third)
+app.add_middleware(AuthMiddleware)
+
+# 2. TraceIdMiddleware (executes second)
+app.add_middleware(TraceIdMiddleware) 
+
+# 3. CORS middleware (executes first - MUST BE LAST ADDED)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -79,16 +69,16 @@ app.add_middleware(
         "http://localhost:3000",      # Alternative dev server
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-        # "https://your-frontend-domain.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# middleware
-app.add_middleware(TraceIdMiddleware) 
-app.add_middleware(AuthMiddleware)
+# Static files for uploads
+UPLOAD_DIR = Path(__file__).parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # routers
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
@@ -104,15 +94,14 @@ app.include_router(reviews_router, prefix="/api/v1/reviews", tags=["reviews"])
 app.include_router(addresses_router, prefix="/api/v1/users/me/addresses", tags=["addresses"])
 app.include_router(administrative_router, prefix="/api/v1/administrative", tags=["administrative"])
 app.include_router(product_router, prefix="/api/v1/products", tags=["products"])
-app.include_router(orders_router, prefix="/api/v1/orders", tags=["orders"])
-app.include_router(upload_router, prefix="/api/v1/upload", tags=["upload"])
-app.include_router(checkout_router, prefix="/api/v1/checkout", tags=["checkout"])
-app.include_router(statistics_router, prefix="/api/v1/statistics", tags=["statistics"])
+app.include_router(chat_router_controller, prefix="/api/v1/chat", tags=["chat"])
+app.include_router(chat_router)
 
 app.include_router(orders_router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(upload_router, prefix="/api/v1/upload", tags=["upload"])
 app.include_router(checkout_router, prefix="/api/v1/checkout", tags=["checkout"])
 app.include_router(statistics_router, prefix="/api/v1/statistics", tags=["statistics"])
+app.include_router(notifications_router, prefix="/api/v1/notifications", tags=["notifications"])
 
 @app.get("/")
 def health_check():

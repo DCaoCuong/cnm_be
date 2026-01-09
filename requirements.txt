@@ -1,9 +1,15 @@
+# --- Web Framework & Server ---
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 
 # Database
 sqlalchemy==2.0.36
+# Driver for SQLAlchemy Chat/WebSocket
+aiomysql==0.2.0
+# Driver Alembic migrations
 pymysql==1.1.1
+# async task SQLAlchemy
+greenlet==3.1.1
 alembic==1.14.0
 
 # Environment
@@ -24,5 +30,13 @@ requests>=2.31.0
 # Upload & Utils
 python-multipart==0.0.20
 python-slugify==8.0.1
+
 python-slugify==8.0.1
+# Timezone Asia/Ho_Chi_Minh
+pytz==2024.2
+
+# Auth & Security
+bcrypt==4.1.2
+
+# Upload & Utils
 httpx==0.27.0

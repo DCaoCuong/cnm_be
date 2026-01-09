@@ -1,7 +1,9 @@
 from typing import Optional, List, Tuple
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.wishlist import Wishlist
 from app.models.wishlistItem import WishlistItem
+from app.models.productType import ProductType
+from app.models.product import Product
 from app.repositories.base import BaseRepository
 
 
@@ -13,6 +15,10 @@ class WishlistRepository(BaseRepository[Wishlist]):
         return self.db.query(Wishlist).filter(
             Wishlist.user_id == user_id,
             Wishlist.deleted_at.is_(None),
+        ).options(
+            joinedload(Wishlist.items)
+                .joinedload(WishlistItem.product_type)
+                .joinedload(ProductType.product)
         ).first()
 
 
@@ -24,6 +30,8 @@ class WishlistItemRepository(BaseRepository[WishlistItem]):
         query = self.db.query(WishlistItem).filter(
             WishlistItem.wishlist_id == wishlist_id,
             WishlistItem.deleted_at.is_(None),
+        ).options(
+            joinedload(WishlistItem.product_type).joinedload(ProductType.product)
         )
         total = query.count()
         items = query.offset(skip).limit(limit).all()
