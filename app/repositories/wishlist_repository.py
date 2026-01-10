@@ -12,7 +12,7 @@ class WishlistRepository(BaseRepository[Wishlist]):
         super().__init__(Wishlist, db)
 
     def get_by_user(self, user_id: str) -> Optional[Wishlist]:
-        return self.db.query(Wishlist).filter(
+        wishlist = self.db.query(Wishlist).filter(
             Wishlist.user_id == user_id,
             Wishlist.deleted_at.is_(None),
         ).options(
@@ -20,6 +20,9 @@ class WishlistRepository(BaseRepository[Wishlist]):
                 .joinedload(WishlistItem.product_type)
                 .joinedload(ProductType.product)
         ).first()
+        if wishlist and hasattr(wishlist, "items"):
+            wishlist.items = [item for item in wishlist.items if item.deleted_at is None]
+        return wishlist
 
 
 class WishlistItemRepository(BaseRepository[WishlistItem]):

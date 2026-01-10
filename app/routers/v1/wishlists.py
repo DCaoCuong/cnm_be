@@ -78,12 +78,12 @@ def list_items(wishlist_id: str, db: Session = Depends(get_db)):
     return BaseResponse(success=True, message="Lấy danh sách sản phẩm yêu thích thành công.", data=items, meta=meta)
 
 
-@router.delete("/{wishlist_id}/items/{item_id}", response_model=BaseResponse[None])
-def delete_item(wishlist_id: str, item_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+@router.delete("/items/{item_id}", response_model=BaseResponse[None])
+def delete_item(item_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     obj = get_wishlist_item(db, item_id)
-    if not obj or obj.wishlist_id != wishlist_id:
+    if not obj:
         return BaseResponse(success=False, message="Không tìm thấy sản phẩm trong danh sách yêu thích.", data=None)
     ok = remove_wishlist_item(db, item_id, deleted_by=str(current_user.id))
     if not ok:
         return BaseResponse(success=False, message="Không tìm thấy sản phẩm trong danh sách yêu thích.", data=None)
-    return BaseResponse(success=True, message="Sản phẩm trong danh sách yêu thích đã được xóa.", data=None) 
+    return BaseResponse(success=True, message="Sản phẩm trong danh sách yêu thích đã được xóa.", data=None)
