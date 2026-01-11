@@ -6,6 +6,38 @@ from app.models.userNotification import UserNotification
 from app.models.role import Role
 from app.models.userRole import UserRole
 from app.models.user import User
+import asyncio
+from app.core.notification_sockets import notification_manager
+
+
+async def _push_websocket_notification(user_id: str, notification_data: dict):
+    """Helper async function to push WebSocket notification"""
+    try:
+        await notification_manager.send_notification(str(user_id), notification_data)
+        print(f"✅ [NotificationService] Pushed notification to user {user_id}")
+    except Exception as e:
+        print(f"⚠️ Failed to push notification to user {user_id}: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _schedule_websocket_push(user_id: str, notification_data: dict):
+    """Schedule WebSocket push in a way that works from sync context"""
+    try:
+        # Try to create a task in the current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Create task in running loop
+            asyncio.create_task(_push_websocket_notification(user_id, notification_data))
+        else:
+            # Loop exists but not running, run until complete
+            loop.run_until_complete(_push_websocket_notification(user_id, notification_data))
+    except RuntimeError:
+        # No event loop exists, create new one and run
+        try:
+            asyncio.run(_push_websocket_notification(user_id, notification_data))
+        except Exception as e:
+            print(f"⚠️ Could not schedule WebSocket push for user {user_id}: {e}")
 
 
 class NotificationService:
@@ -73,11 +105,37 @@ class NotificationService:
             created_by=updated_by
         )
         
-        # Gửi notification đến khách hàng
-        self.repo.create_user_notification(
+        # Gửi notification đến khách hàng (lưu vào DB)
+        user_notif = self.repo.create_user_notification(
             user_id=user_id,
             notification_id=notification.id
         )
+        
+        # 🔥 Push real-time notification via WebSocket
+        try:
+            # Get updated unread count for this user
+            unread_count = self.repo.get_unread_count(user_id)
+            
+            # Prepare notification data
+            notification_data = {
+                "type": "new_notification",
+                "data": {
+                    "id": str(user_notif.id),
+                    "notification_id": str(notification.id),
+                    "title": notification.title,
+                    "content": notification.content,
+                    "notification_type": notification.type,
+                    "order_id": str(notification.order_id) if notification.order_id else None,
+                    "is_read": user_notif.is_read,
+                    "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                },
+                "unread_count": unread_count
+            }
+            
+            # Schedule WebSocket push
+            _schedule_websocket_push(str(user_id), notification_data)
+        except Exception as e:
+            print(f"⚠️ Failed to prepare notification push for user {user_id}: {e}")
         
         return notification
     
@@ -99,13 +157,43 @@ class NotificationService:
             User.deleted_at.is_(None)
         ).all()
         
+        # Get notification details for WebSocket push
+        notification = self.repo.get_notification_by_id(notification_id)
+        
         count = 0
         for user in admin_users:
-            self.repo.create_user_notification(
+            # Create user_notification record in DB
+            user_notif = self.repo.create_user_notification(
                 user_id=user.id,
                 notification_id=notification_id
             )
             count += 1
+            
+            # 🔥 Push real-time notification via WebSocket
+            try:
+                # Get updated unread count for this admin
+                unread_count = self.repo.get_unread_count(user.id)
+                
+                # Prepare notification data
+                notification_data = {
+                    "type": "new_notification",
+                    "data": {
+                        "id": str(user_notif.id),
+                        "notification_id": str(notification.id),
+                        "title": notification.title,
+                        "content": notification.content,
+                        "notification_type": notification.type,
+                        "order_id": str(notification.order_id) if notification.order_id else None,
+                        "is_read": user_notif.is_read,
+                        "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                    },
+                    "unread_count": unread_count
+                }
+                
+                # Schedule WebSocket push
+                _schedule_websocket_push(str(user.id), notification_data)
+            except Exception as e:
+                print(f"⚠️ Failed to prepare notification push for admin {user.id}: {e}")
         
         return count
     

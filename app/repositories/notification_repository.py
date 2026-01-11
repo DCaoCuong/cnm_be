@@ -142,4 +142,12 @@ class NotificationRepository(BaseRepository[Notification]):
             UserNotification.user_id == user_id,
             UserNotification.deleted_at.is_(None)
         ).first()
+    
+    def get_notification_by_id(self, notification_id: str) -> Optional[Notification]:
+        """Lấy notification theo ID"""
+        return self.db.query(Notification).filter(
+            Notification.id == notification_id,
+            Notification.deleted_at.is_(None)
+        ).first()
+
 
