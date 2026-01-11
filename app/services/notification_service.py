@@ -10,6 +10,36 @@ import asyncio
 from app.core.notification_sockets import notification_manager
 
 
+async def _push_websocket_notification(user_id: str, notification_data: dict):
+    """Helper async function to push WebSocket notification"""
+    try:
+        await notification_manager.send_notification(str(user_id), notification_data)
+        print(f"✅ [NotificationService] Pushed notification to user {user_id}")
+    except Exception as e:
+        print(f"⚠️ Failed to push notification to user {user_id}: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def _schedule_websocket_push(user_id: str, notification_data: dict):
+    """Schedule WebSocket push in a way that works from sync context"""
+    try:
+        # Try to create a task in the current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Create task in running loop
+            asyncio.create_task(_push_websocket_notification(user_id, notification_data))
+        else:
+            # Loop exists but not running, run until complete
+            loop.run_until_complete(_push_websocket_notification(user_id, notification_data))
+    except RuntimeError:
+        # No event loop exists, create new one and run
+        try:
+            asyncio.run(_push_websocket_notification(user_id, notification_data))
+        except Exception as e:
+            print(f"⚠️ Could not schedule WebSocket push for user {user_id}: {e}")
+
+
 class NotificationService:
     def __init__(self, db: Session):
         self.db = db
@@ -102,15 +132,10 @@ class NotificationService:
                 "unread_count": unread_count
             }
             
-            # Send via WebSocket asynchronously
-            asyncio.create_task(
-                notification_manager.send_notification(
-                    str(user_id), 
-                    notification_data
-                )
-            )
+            # Schedule WebSocket push
+            _schedule_websocket_push(str(user_id), notification_data)
         except Exception as e:
-            print(f"⚠️ Failed to push notification to user {user_id}: {e}")
+            print(f"⚠️ Failed to prepare notification push for user {user_id}: {e}")
         
         return notification
     
@@ -165,15 +190,10 @@ class NotificationService:
                     "unread_count": unread_count
                 }
                 
-                # Send via WebSocket asynchronously
-                asyncio.create_task(
-                    notification_manager.send_notification(
-                        str(user.id), 
-                        notification_data
-                    )
-                )
+                # Schedule WebSocket push
+                _schedule_websocket_push(str(user.id), notification_data)
             except Exception as e:
-                print(f"⚠️ Failed to push notification to admin {user.id}: {e}")
+                print(f"⚠️ Failed to prepare notification push for admin {user.id}: {e}")
         
         return count
     
