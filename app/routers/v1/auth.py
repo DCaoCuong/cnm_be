@@ -24,7 +24,8 @@ from app.schemas.response.auth import (
 )
 from app.schemas.response.base import BaseResponse
 from app.services.auth_service import (
-    create_user, 
+    create_user,
+    create_or_update_unverified_user,
     authenticate_user, 
     login, 
     renew_tokens, 
@@ -40,16 +41,24 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     """
     Đăng ký tài khoản mới.
     
-    - Tạo user trong database (email_confirmed=False)
+    - Kiểm tra email đã tồn tại:
+      + Nếu đã verified -> trả về lỗi 400
+      + Nếu chưa verified -> cập nhật thông tin và gửi lại mã
+    - Tạo user mới nếu email chưa tồn tại
     - Gửi mã xác thực 6 số qua email
     - KHÔNG trả về token
     - User phải verify email trước khi có thể login
     """
-    user = create_user(db, user_in, created_by=None)
+    user, is_new = create_or_update_unverified_user(db, user_in, created_by=None)
+    
+    if is_new:
+        message = "Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản."
+    else:
+        message = "Email này đã đăng ký nhưng chưa xác thực. Chúng tôi đã cập nhật thông tin và gửi lại mã xác thực."
     
     return RegisterResponse(
         success=True,
-        message="Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.",
+        message=message,
         email=user.email,
         verification_sent=True
     )
@@ -141,13 +150,13 @@ def admin_reset_user_password(
     _: User = Depends(require_roles("ADMIN"))
 ):
     """
-    API cho Admin/Manager reset mật khẩu user.
+    API cho Admin reset mật khẩu user.
     
     - **user_id**: ID của user cần reset password
     - Tạo mật khẩu ngẫu nhiên mạnh
     - Gửi email thông báo mật khẩu mới cho user
     - Xóa refresh token (bắt user phải login lại)
-    - Chỉ ADMIN hoặc MANAGER mới có quyền sử dụng
+    - Chỉ ADMIN mới có quyền sử dụng
     """
     from app.repositories.user_repository import UserRepository
     
