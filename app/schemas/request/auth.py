@@ -77,3 +77,8 @@ class RefreshTokenRequest(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     id_token: str
+
+
+class AdminResetPasswordRequest(BaseModel):
+    """Request schema cho admin reset password user"""
+    user_id: str

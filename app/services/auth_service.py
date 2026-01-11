@@ -1,6 +1,7 @@
 from datetime import timedelta, datetime
 from typing import Optional, Tuple
 import secrets
+import string
 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -16,6 +17,7 @@ from app.schemas.request.auth import UserCreate
 from app.core.security import create_access_token
 from app.core.config import settings
 from app.services.email_verification_service import EmailVerificationService
+from app.services.email_service import EmailService
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
@@ -289,3 +291,91 @@ def authenticate_google_user(google_id_token: str, db: Session) -> User:
         user = user_repo.assign_role(user, role.name)
 
     return user
+
+
+def generate_random_password(length: int = 12) -> str:
+    """
+    Tạo mật khẩu ngẫu nhiên an toàn.
+    
+    Args:
+        length: Độ dài mật khẩu (mặc định 12)
+        
+    Returns:
+        Mật khẩu ngẫu nhiên đáp ứng yêu cầu: chữ hoa, chữ thường, số, ký tự đặc biệt
+    """
+    # Đảm bảo có ít nhất 1 ký tự từ mỗi loại
+    password = [
+        secrets.choice(string.ascii_uppercase),  # Chữ hoa
+        secrets.choice(string.ascii_lowercase),  # Chữ thường
+        secrets.choice(string.digits),           # Số
+        secrets.choice(string.punctuation),      # Ký tự đặc biệt
+    ]
+    
+    # Thêm các ký tự ngẫu nhiên còn lại
+    all_chars = string.ascii_letters + string.digits + string.punctuation
+    password += [secrets.choice(all_chars) for _ in range(length - 4)]
+    
+    # Xáo trộn để tránh pattern cố định
+    secrets.SystemRandom().shuffle(password)
+    
+    return ''.join(password)
+
+
+def admin_reset_password(
+    db: Session,
+    user_id: str,
+    admin_id: str
+) -> Tuple[bool, str]:
+    """
+    Admin reset mật khẩu cho user.
+    Tạo mật khẩu ngẫu nhiên, cập nhật vào DB và gửi email cho user.
+    
+    Args:
+        db: Database session
+        user_id: ID của user cần reset password
+        admin_id: ID của admin thực hiện reset
+        
+    Returns:
+        Tuple (success: bool, message: str)
+    """
+    user_repo = UserRepository(db)
+    
+    # 1. Kiểm tra user tồn tại
+    user = user_repo.get(user_id)
+    if not user:
+        return False, "User không tồn tại"
+    
+    # 2. Tạo mật khẩu ngẫu nhiên
+    new_password = generate_random_password(12)
+    
+    # 3. Hash và cập nhật password
+    user.password_hash = pwd_context.hash(new_password)
+    
+    # 4. Xóa refresh token hiện tại (bắt user phải login lại)
+    user.refresh_token = None
+    
+    # 5. Lưu vào DB
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    # 6. Gửi email thông báo mật khẩu mới
+    try:
+        email_service = EmailService()
+        success = email_service.send_reset_password_by_admin(
+            to_email=user.email,
+            new_password=new_password,
+            user_name=f"{user.first_name or ''} {user.last_name or ''}".strip()
+        )
+        
+        if not success:
+            # Rollback nếu gửi email thất bại
+            db.rollback()
+            return False, "Không thể gửi email. Vui lòng thử lại."
+            
+    except Exception as e:
+        db.rollback()
+        print(f"Error sending reset password email: {str(e)}")
+        return False, f"Lỗi khi gửi email: {str(e)}"
+    
+    return True, f"Đã reset mật khẩu thành công và gửi email đến {user.email}"
