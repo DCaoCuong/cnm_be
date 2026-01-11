@@ -6,6 +6,8 @@ from app.models.userNotification import UserNotification
 from app.models.role import Role
 from app.models.userRole import UserRole
 from app.models.user import User
+import asyncio
+from app.core.notification_sockets import notification_manager
 
 
 class NotificationService:
@@ -73,11 +75,42 @@ class NotificationService:
             created_by=updated_by
         )
         
-        # Gửi notification đến khách hàng
-        self.repo.create_user_notification(
+        # Gửi notification đến khách hàng (lưu vào DB)
+        user_notif = self.repo.create_user_notification(
             user_id=user_id,
             notification_id=notification.id
         )
+        
+        # 🔥 Push real-time notification via WebSocket
+        try:
+            # Get updated unread count for this user
+            unread_count = self.repo.get_unread_count(user_id)
+            
+            # Prepare notification data
+            notification_data = {
+                "type": "new_notification",
+                "data": {
+                    "id": str(user_notif.id),
+                    "notification_id": str(notification.id),
+                    "title": notification.title,
+                    "content": notification.content,
+                    "notification_type": notification.type,
+                    "order_id": str(notification.order_id) if notification.order_id else None,
+                    "is_read": user_notif.is_read,
+                    "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                },
+                "unread_count": unread_count
+            }
+            
+            # Send via WebSocket asynchronously
+            asyncio.create_task(
+                notification_manager.send_notification(
+                    str(user_id), 
+                    notification_data
+                )
+            )
+        except Exception as e:
+            print(f"⚠️ Failed to push notification to user {user_id}: {e}")
         
         return notification
     
@@ -99,13 +132,48 @@ class NotificationService:
             User.deleted_at.is_(None)
         ).all()
         
+        # Get notification details for WebSocket push
+        notification = self.repo.get_notification_by_id(notification_id)
+        
         count = 0
         for user in admin_users:
-            self.repo.create_user_notification(
+            # Create user_notification record in DB
+            user_notif = self.repo.create_user_notification(
                 user_id=user.id,
                 notification_id=notification_id
             )
             count += 1
+            
+            # 🔥 Push real-time notification via WebSocket
+            try:
+                # Get updated unread count for this admin
+                unread_count = self.repo.get_unread_count(user.id)
+                
+                # Prepare notification data
+                notification_data = {
+                    "type": "new_notification",
+                    "data": {
+                        "id": str(user_notif.id),
+                        "notification_id": str(notification.id),
+                        "title": notification.title,
+                        "content": notification.content,
+                        "notification_type": notification.type,
+                        "order_id": str(notification.order_id) if notification.order_id else None,
+                        "is_read": user_notif.is_read,
+                        "created_at": notification.created_at.isoformat() if notification.created_at else None,
+                    },
+                    "unread_count": unread_count
+                }
+                
+                # Send via WebSocket asynchronously
+                asyncio.create_task(
+                    notification_manager.send_notification(
+                        str(user.id), 
+                        notification_data
+                    )
+                )
+            except Exception as e:
+                print(f"⚠️ Failed to push notification to admin {user.id}: {e}")
         
         return count
     
