@@ -76,15 +76,57 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_user(
+def create_or_update_unverified_user(
     db: Session,
     user_in: UserCreate,
     role_name: str = "CLIENT",
     created_by: Optional[str] = None,
-) -> User:
+) -> Tuple[User, bool]:
+    """
+    Tạo user mới hoặc cập nhật user chưa verify email.
+    
+    Returns:
+        Tuple[User, is_new_user]: User object và flag cho biết là user mới hay update
+    
+    Raises:
+        HTTPException: Nếu email đã được đăng ký và verified
+    """
     user_repo = UserRepository(db)
     role_repo = RoleRepository(db)
 
+    # Kiểm tra email đã tồn tại chưa
+    existing_user = user_repo.get_by_email(user_in.email)
+    
+    if existing_user:
+        # Email đã tồn tại và đã verified -> không cho đăng ký lại
+        if existing_user.email_confirmed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email này đã được đăng ký. Vui lòng sử dụng email khác hoặc đăng nhập."
+            )
+        
+        # Email tồn tại nhưng chưa verified -> cập nhật thông tin
+        hashed = pwd_context.hash(user_in.password)
+        existing_user.password_hash = hashed
+        existing_user.first_name = user_in.first_name
+        existing_user.last_name = user_in.last_name
+        existing_user.phone_number = user_in.phone_number
+        # email_confirmed vẫn giữ nguyên là False
+        
+        db.add(existing_user)
+        db.commit()
+        db.refresh(existing_user)
+        
+        # Gửi lại mã xác thực
+        try:
+            verification_service = EmailVerificationService(db)
+            verification_service.send_verification_code(existing_user.id, is_resend=True)
+        except Exception as e:
+            print(f"Warning: Failed to send verification email: {str(e)}")
+        
+        return existing_user, False  # Không phải user mới
+    
+    # Email chưa tồn tại -> tạo mới
     hashed = pwd_context.hash(user_in.password)
     user_data = {
         "email": user_in.email,
@@ -106,6 +148,20 @@ def create_user(
         # Log error nhưng không fail registration
         print(f"Warning: Failed to send verification email: {str(e)}")
 
+    return user, True  # User mới
+
+
+def create_user(
+    db: Session,
+    user_in: UserCreate,
+    role_name: str = "CLIENT",
+    created_by: Optional[str] = None,
+) -> User:
+    """
+    Legacy function - giữ lại để tương thích ngược.
+    Nên dùng create_or_update_unverified_user() thay thế.
+    """
+    user, _ = create_or_update_unverified_user(db, user_in, role_name, created_by)
     return user
 
 
