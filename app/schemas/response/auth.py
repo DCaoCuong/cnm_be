@@ -62,3 +62,10 @@ class VerificationStatusResponse(BaseModel):
     attempts_remaining: Optional[int] = None
     resend_count: Optional[int] = None
 
+
+class AdminResetPasswordResponse(BaseModel):
+    """Response schema cho admin reset password"""
+    success: bool
+    message: str
+    email: EmailStr
+

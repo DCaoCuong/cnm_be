@@ -3,23 +3,34 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.database import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.permission import require_roles
+from app.models.user import User
 from app.schemas.request.auth import (
     UserCreate, 
     LoginRequest, 
     RefreshTokenRequest, 
     GoogleLoginRequest,
     VerifyEmailRequest,
-    ResendVerificationRequest
+    ResendVerificationRequest,
+    AdminResetPasswordRequest
 )
 from app.schemas.response.auth import (
     UserResponse, 
     TokenResponse,
     VerifyEmailResponse,
     VerificationStatusResponse,
-    RegisterResponse
+    RegisterResponse,
+    AdminResetPasswordResponse
 )
 from app.schemas.response.base import BaseResponse
-from app.services.auth_service import create_user, authenticate_user, login, renew_tokens, authenticate_google_user
+from app.services.auth_service import (
+    create_user, 
+    authenticate_user, 
+    login, 
+    renew_tokens, 
+    authenticate_google_user,
+    admin_reset_password
+)
 from app.services.email_verification_service import EmailVerificationService
 
 router = APIRouter()
@@ -120,5 +131,53 @@ def resend_verification_code(
     success, message = service.send_verification_code_by_email(request.email, is_resend=True)
     
     return BaseResponse(success=success, message=message, data=message)
+
+
+@router.post("/admin/reset-password", response_model=AdminResetPasswordResponse)
+def admin_reset_user_password(
+    request: AdminResetPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    _: User = Depends(require_roles("ADMIN"))
+):
+    """
+    API cho Admin/Manager reset mật khẩu user.
+    
+    - **user_id**: ID của user cần reset password
+    - Tạo mật khẩu ngẫu nhiên mạnh
+    - Gửi email thông báo mật khẩu mới cho user
+    - Xóa refresh token (bắt user phải login lại)
+    - Chỉ ADMIN hoặc MANAGER mới có quyền sử dụng
+    """
+    from app.repositories.user_repository import UserRepository
+    
+    # Kiểm tra user tồn tại và lấy email
+    user_repo = UserRepository(db)
+    target_user = user_repo.get(request.user_id)
+    
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User không tồn tại"
+        )
+    
+    # Thực hiện reset password
+    success, message = admin_reset_password(
+        db=db,
+        user_id=request.user_id,
+        admin_id=str(current_user.id)
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=message
+        )
+    
+    return AdminResetPasswordResponse(
+        success=True,
+        message=message,
+        email=target_user.email
+    )
 
 
