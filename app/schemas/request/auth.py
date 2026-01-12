@@ -47,8 +47,70 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class VerifyEmailRequest(BaseModel):
+    """Request để verify email (public endpoint)"""
+    email: EmailStr
+    code: str
+    
+    @validator("code")
+    def validate_code(cls, v: str) -> str:
+        if len(v) != 6 or not v.isdigit():
+            raise ValueError("Code must be exactly 6 digits")
+        return v
+
+
+class ResendVerificationRequest(BaseModel):
+    """Request để resend verification code (public endpoint)"""
+    email: EmailStr
+
+
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone_number: Optional[str] = None
     name: Optional[str] = None
+    dob: Optional[datetime] = None
+    gender: Optional[int] = None
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str
+
+
+class AdminResetPasswordRequest(BaseModel):
+    """Request schema cho admin reset password user"""
+    user_id: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request để yêu cầu reset password (gửi email kèm token)"""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request để reset password với token từ email"""
+    token: str
+    new_password: str
+    confirm_password: str
+    
+    @validator("new_password")
+    def password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Mật khẩu phải có ít nhất 8 ký tự")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Mật khẩu phải có ít nhất 1 chữ hoa")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Mật khẩu phải có ít nhất 1 chữ thường")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("Mật khẩu phải có ít nhất 1 chữ số")
+        if not re.search(r"[^A-Za-z0-9]", v):
+            raise ValueError("Mật khẩu phải có ít nhất 1 ký tự đặc biệt")
+        return v
+    
+    @validator("confirm_password")
+    def passwords_match(cls, v: str, values: dict) -> str:
+        if "new_password" in values and v != values["new_password"]:
+            raise ValueError("Mật khẩu xác nhận không khớp")
+        return v

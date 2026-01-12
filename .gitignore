@@ -48,4 +48,12 @@ dist/
 .DS_Store
 Thumbs.db
 
+/scripts
 scripts/
+
+# Data files (địa giới hành chính VN)
+data/*.json
+!data/.gitkeep
+
+
+/app/uploads

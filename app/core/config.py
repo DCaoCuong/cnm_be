@@ -20,13 +20,15 @@ class Settings(BaseSettings):
     # --- Security & JWT ---
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60
     
     # --- Server Configuration ---
     DEBUG: bool = False
     UVICORN_HOST: str = "0.0.0.0"
     UVICORN_PORT: int = 8000
     RELOAD: bool = True
+    FRONTEND_URL: str = "http://localhost:5173"  # URL frontend cho reset password link
 
     # --- CORS Configuration ---
     CORS_ORIGINS: Any = [] 
@@ -41,11 +43,28 @@ class Settings(BaseSettings):
             return v
         return []
 
+    # --- SePay Configuration ---
+    SEPAY_ACCOUNT_NUMBER: str = ""
+    SEPAY_ACCOUNT_NAME: str = ""
+    SEPAY_BANK_ID: str = "MB"
+    SEPAY_TEMPLATE: str = "compact2"
+    SEPAY_WEBHOOK_SECRET: str = ""
+
     # --- Mail Configuration (SMTP) ---
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""
+    SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
+    SMTP_USE_SSL: bool = False
+    SMTP_USE_TLS: bool = True
+
+    # Email Sender
+    EMAIL_FROM: str = ""
+    EMAIL_FROM_NAME: str = ""
+    
+    # --- Google Auth Configuration ---
+    GOOGLE_CLIENT_ID: str = ""
+    
 
 # Sử dụng lru_cache để đảm bảo Settings chỉ được khởi tạo một lần (Singleton pattern)
 @lru_cache
